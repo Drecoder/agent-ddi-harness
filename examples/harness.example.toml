@@ -1,0 +1,76 @@
+# DDI harness configuration. The owner governs this file: thresholds, bounded contexts,
+# rule catalogs and roadmap flags. Agents read it; a change to it is a reviewed PR.
+schema = "ddi.harness.v1"
+
+[project]
+# Source roots the gauntlet measures, and the command that runs the whole test suite.
+# The built-in Python analyzers run tests in-process with unittest; set test_command for
+# anything else (it must exit non-zero on a failing test).
+source_roots = ["src"]
+test_roots = ["tests"]
+test_command = ""          # empty = built-in `unittest discover` over test_roots
+
+[rotor]
+# Push range when the hook gets none (first push of a branch): diff against this ref.
+base_ref = "origin/main"
+# Risk signals Rotor raises from paths and messages. Each one ranks matching EEP rules higher.
+risk_paths = { "migrations/" = "data-migration", "auth" = "security", ".github/workflows/" = "ci" }
+risk_words = ["hotfix", "revert", "security", "migration", "breaking"]
+
+# DDD: bounded contexts by path prefix, and the ubiquitous language each one owns.
+# A change that touches two contexts must say so in its intent (EEP DDD-002).
+[contexts.billing]
+paths = ["src/billing/"]
+terms = ["invoice", "ledger", "charge", "refund"]
+invariants = ["an invoice total equals the sum of its lines", "a refund never exceeds its charge"]
+
+[contexts.catalog]
+paths = ["src/catalog/"]
+terms = ["product", "sku", "price"]
+invariants = ["a sku is unique within the catalog"]
+
+[eep]
+# Rule catalogs, read in order. A rule's id is global; a later file may not redefine it.
+catalogs = ["eep-rules/habits.json", "eep-rules/ddd.json", "eep-rules/capa.json", "eep-rules/conflict.json"]
+# How many ranked rules the slice keeps, and the size of each chunk handed to a prompt.
+slice_size = 12
+chunk_chars = 1200
+
+[solution_check]
+max_changed_lines = 400        # Minimal Diff: above this the push needs `Scope:` in intent
+require_test_with_source = true  # TDD: a source change ships with a test change
+
+[gates.crap]
+threshold = 30.0               # per function; CRAP = c^2 * (1 - cov)^3 + c
+changed_only = true            # judge only functions in changed files
+
+[gates.mutation]
+engine = "builtin"             # builtin (Python AST) | report (Stryker mutation.json)
+report_path = "reports/mutation/mutation.json"
+min_score = 0.80               # killed / (killed + survived), per changed file set
+max_mutants = 60               # budget per run, so the hook stays fast; deterministic order
+timeout_s = 60
+
+[gates.pyramid]
+# Test layers by path glob, and the shape the suite must keep.
+layers = { unit = "tests/unit/**", integration = "tests/integration/**", contract = "tests/contract/**" }
+min_unit_share = 0.60          # unit tests are at least this share of all tests
+max_e2e_share = 0.10           # anything outside the three layers counts as e2e
+require_layers = ["unit"]
+
+[artifacts]
+dir = ".ddi"                   # events.jsonl, capa/, verification/ — local, never pushed
+
+# ---- Roadmap seams: off by default. Level 1 never imports them unless enabled. ----
+[extensions.level2_rag_s3_capa]
+enabled = false
+# Read-only context lookup against the vectorized CAPA graph (Databricks → S3 Vectors).
+# Uses the shell's inherited AWS credentials; the harness configures no auth.
+bucket = ""
+index = ""
+top_k = 5
+
+[extensions.level3_capa_tuner]
+enabled = false
+# Writes the CAPA graph JSON export the tuner will read; the tuner itself is not built.
+export_path = ".ddi/level3/capa_graph_export.json"

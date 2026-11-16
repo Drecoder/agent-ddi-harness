@@ -1,0 +1,65 @@
+{
+  "schema": "ddi.eep_rules.v1",
+  "catalog": "habits",
+  "rules": [
+    {
+      "id": "HAB-001",
+      "kind": "habit",
+      "phase": "rotor",
+      "title": "Scope & Premise Check",
+      "text": "Before acting, state the intent in the push's commit messages and test its premises: name the domain terms and invariants the change relies on, and say what would make the premise false. A push whose intent is empty or a placeholder ('wip', 'fix', 'update') has no premise to check.",
+      "weight": 1.0,
+      "triggers": {},
+      "check": "intent_present",
+      "blocking": true
+    },
+    {
+      "id": "HAB-002",
+      "kind": "habit",
+      "phase": "inner",
+      "title": "Investigate & Blast Radius",
+      "text": "Trace who imports each changed module and which bounded context owns the state it touches. Under a merge or rebase, read both sides: the base, ours and theirs. The harness records the reverse-dependency set in the verification artifact so the reviewer sees the radius without re-deriving it.",
+      "weight": 0.9,
+      "triggers": {},
+      "check": "blast_radius",
+      "blocking": false
+    },
+    {
+      "id": "HAB-003",
+      "kind": "habit",
+      "phase": "inner",
+      "title": "TDD & Root Cause",
+      "text": "Write the failing test or reproduction first, then fix the cause it exposes, not the symptom. A source change pushed without a test change has no failing test to show.",
+      "weight": 1.0,
+      "triggers": {
+        "scopes": [
+          "source"
+        ]
+      },
+      "check": "test_with_source",
+      "blocking": true
+    },
+    {
+      "id": "HAB-004",
+      "kind": "habit",
+      "phase": "inner",
+      "title": "Minimal Diff & Architecture",
+      "text": "Keep the change to what the intent asks for. Cut dead code and unrequested scope; do not cross a bounded context to save a line. Over the size budget, the intent must carry a 'Scope:' line saying why.",
+      "weight": 0.8,
+      "triggers": {},
+      "check": "minimal_diff",
+      "blocking": true
+    },
+    {
+      "id": "HAB-005",
+      "kind": "habit",
+      "phase": "check",
+      "title": "Prove With Evidence",
+      "text": "Every claim in the push is backed by a command the harness ran: its exit code, its numbers and its limits. Anything not run is written as a caveat, never as a result.",
+      "weight": 1.0,
+      "triggers": {},
+      "check": "evidence_recorded",
+      "blocking": true
+    }
+  ]
+}

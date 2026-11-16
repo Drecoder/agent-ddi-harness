@@ -1,0 +1,10 @@
+{
+  "id": "HAB-902",
+  "kind": "habit",
+  "phase": "inner",
+  "title": "Example",
+  "text": "too short",
+  "weight": 1.0,
+  "triggers": {},
+  "check": "skip_tests"
+}

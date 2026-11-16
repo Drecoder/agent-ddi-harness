@@ -1,0 +1,25 @@
+# Local loop output: events, CAPA / conflict drafts, verification artifacts, slices, Level 3 exports.
+# They are claims about local runs; they are never committed.
+.ddi/
+
+# Demo and benchmark output
+demo-results.json
+ddi-demos-*/
+
+# Mutation reports a project tool may write
+reports/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

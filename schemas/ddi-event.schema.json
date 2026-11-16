@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ddi-event.schema.json",
+  "title": "One loop event: state (EDD) or error (error-driven)",
+  "type": "object",
+  "required": [
+    "schema",
+    "run_id",
+    "kind",
+    "name",
+    "t"
+  ],
+  "patternProperties": {
+    "^ci_(?!provenance$)": false,
+    "^(certified|signed|verified)": false
+  },
+  "properties": {
+    "schema": {
+      "const": "ddi.event.v1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "enum": [
+        "state",
+        "error"
+      ]
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.]*$"
+    },
+    "t": {
+      "type": "number",
+      "minimum": 0
+    }
+  }
+}

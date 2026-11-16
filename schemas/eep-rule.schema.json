@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "eep-rule.schema.json",
+  "title": "One EEP rule (habit, DDD, CAPA, conflict or architecture)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "kind",
+    "phase",
+    "title",
+    "text",
+    "weight",
+    "triggers"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^(HAB|DDD|CAPA|CON|ARCH)-[0-9]{3}$"
+    },
+    "kind": {
+      "enum": [
+        "habit",
+        "ddd",
+        "capa",
+        "conflict",
+        "architecture"
+      ]
+    },
+    "phase": {
+      "enum": [
+        "rotor",
+        "inner",
+        "capture",
+        "check",
+        "gauntlet"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "text": {
+      "type": "string",
+      "minLength": 20
+    },
+    "weight": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 5
+    },
+    "triggers": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scopes": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "source",
+              "tests",
+              "docs",
+              "config",
+              "merge",
+              "conflict",
+              "multi-context"
+            ]
+          }
+        },
+        "risk": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "check": {
+      "enum": [
+        "intent_present",
+        "blast_radius",
+        "test_with_source",
+        "minimal_diff",
+        "evidence_recorded",
+        "context_crossing",
+        "capa_on_block",
+        "draft_is_claim",
+        "no_unmerged_paths",
+        "no_conflict_markers",
+        "conflict_record"
+      ]
+    },
+    "blocking": {
+      "type": "boolean"
+    }
+  }
+}

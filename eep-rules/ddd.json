@@ -1,0 +1,47 @@
+{
+  "schema": "ddi.eep_rules.v1",
+  "catalog": "ddd",
+  "rules": [
+    {
+      "id": "DDD-001",
+      "kind": "ddd",
+      "phase": "rotor",
+      "title": "Ubiquitous language",
+      "text": "Use each bounded context's own terms (harness.toml contexts.*.terms) in names, tests and intent. A term from another context inside this one is a translation the code must make explicit.",
+      "weight": 0.7,
+      "triggers": {
+        "scopes": [
+          "source"
+        ]
+      }
+    },
+    {
+      "id": "DDD-002",
+      "kind": "ddd",
+      "phase": "inner",
+      "title": "Declare a cross-context change",
+      "text": "A change touching more than one bounded context names them in its intent ('Contexts: billing, catalog') so the boundary crossing is a decision, not an accident.",
+      "weight": 1.0,
+      "triggers": {
+        "scopes": [
+          "multi-context"
+        ]
+      },
+      "check": "context_crossing",
+      "blocking": true
+    },
+    {
+      "id": "DDD-003",
+      "kind": "ddd",
+      "phase": "inner",
+      "title": "Hold the context's invariants",
+      "text": "Each touched context's invariants (harness.toml contexts.*.invariants) are listed in the slice; a test asserts every invariant the change can break.",
+      "weight": 0.9,
+      "triggers": {
+        "scopes": [
+          "source"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "capa-graph-export.schema.json",
+  "title": "Level 3 seam: CAPA graph JSON export",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "nodes",
+    "edges"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ddi.capa_graph_export.v1"
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "enum": [
+              "run",
+              "draft",
+              "rule",
+              "gate"
+            ]
+          }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "enum": [
+              "emitted",
+              "tripped_by"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

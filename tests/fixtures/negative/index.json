@@ -1,0 +1,30 @@
+{
+  "NEG-EEP-01": {
+    "schema": "eep-rule.schema.json",
+    "why": "unknown kind 'opinion'"
+  },
+  "NEG-EEP-02": {
+    "schema": "eep-rule.schema.json",
+    "why": "unknown check name and a text too short to be a rule"
+  },
+  "NEG-CAPA-01": {
+    "schema": "capa-conflict-draft.schema.json",
+    "why": "a draft claiming status verified"
+  },
+  "NEG-CAPA-02": {
+    "schema": "capa-conflict-draft.schema.json",
+    "why": "a draft claiming trust ci_certified"
+  },
+  "NEG-CAPA-03": {
+    "schema": "capa-conflict-draft.schema.json",
+    "why": "a draft carrying forged CI provenance"
+  },
+  "NEG-CAPA-04": {
+    "schema": "capa-conflict-draft.schema.json",
+    "why": "a draft adding a ci_signed_evidence field"
+  },
+  "NEG-EVT-01": {
+    "schema": "ddi-event.schema.json",
+    "why": "an event claiming CI certification"
+  }
+}

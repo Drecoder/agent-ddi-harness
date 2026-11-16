@@ -1,0 +1,60 @@
+{
+  "schema": "ddi.eep_rules.v1",
+  "catalog": "conflict",
+  "rules": [
+    {
+      "id": "CON-001",
+      "kind": "conflict",
+      "phase": "rotor",
+      "title": "No unmerged paths at the boundary",
+      "text": "A push with unmerged paths in the index stops: resolve, test, then push.",
+      "weight": 1.0,
+      "triggers": {
+        "scopes": [
+          "conflict"
+        ]
+      },
+      "check": "no_unmerged_paths",
+      "blocking": true
+    },
+    {
+      "id": "CON-002",
+      "kind": "conflict",
+      "phase": "check",
+      "title": "No conflict markers in pushed files",
+      "text": "A pushed file containing '<<<<<<<', '=======' or '>>>>>>>' line markers was resolved by hand and not finished.",
+      "weight": 1.0,
+      "triggers": {},
+      "check": "no_conflict_markers",
+      "blocking": true
+    },
+    {
+      "id": "CON-003",
+      "kind": "conflict",
+      "phase": "capture",
+      "title": "A resolution records both sides",
+      "text": "A merge commit in the push range gets a conflict draft naming its parents, the paths both sides changed, and which side each hunk kept, so the reviewer reads the decision, not a transcript.",
+      "weight": 0.9,
+      "triggers": {
+        "scopes": [
+          "merge"
+        ]
+      },
+      "check": "conflict_record",
+      "blocking": false
+    },
+    {
+      "id": "CON-004",
+      "kind": "conflict",
+      "phase": "gauntlet",
+      "title": "Re-prove after resolving",
+      "text": "A resolution is new code: the full gauntlet runs on the merged tree, never on either side alone.",
+      "weight": 0.8,
+      "triggers": {
+        "scopes": [
+          "merge"
+        ]
+      }
+    }
+  ]
+}

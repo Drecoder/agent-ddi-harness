@@ -1,0 +1,9 @@
+{
+  "id": "HAB-099",
+  "kind": "habit",
+  "phase": "inner",
+  "title": "Example",
+  "text": "An example rule long enough to pass the length check.",
+  "weight": 1.0,
+  "triggers": {}
+}

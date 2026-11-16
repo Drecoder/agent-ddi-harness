@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "verification-artifact.schema.json",
+  "title": "A local verification artifact: staged, an unverified claim",
+  "type": "object",
+  "patternProperties": {
+    "^ci_(?!provenance$)": false,
+    "^(certified|signed|verified)": false
+  },
+  "required": [
+    "schema",
+    "run_id",
+    "decision",
+    "status",
+    "trust",
+    "ci_provenance",
+    "range",
+    "scope",
+    "eep_slice",
+    "solution_check",
+    "gauntlet",
+    "capa_drafts",
+    "mttd",
+    "caveats"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ddi.verification_artifact.v1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "decision": {
+      "enum": [
+        "push_allowed",
+        "push_blocked"
+      ]
+    },
+    "status": {
+      "const": "staged"
+    },
+    "trust": {
+      "const": "unverified_claim"
+    },
+    "ci_provenance": {
+      "const": null
+    },
+    "gauntlet": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "gate",
+          "ok",
+          "summary",
+          "commands"
+        ],
+        "properties": {
+          "gate": {
+            "enum": [
+              "crap",
+              "mutation",
+              "pyramid"
+            ]
+          }
+        }
+      }
+    },
+    "capa_drafts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{16}$"
+      }
+    }
+  }
+}

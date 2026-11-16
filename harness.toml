@@ -1,0 +1,49 @@
+# The harness's own configuration: it gates its own pushes with the same loop it ships.
+# For a starting point in your project, copy examples/harness.example.toml instead.
+schema = "ddi.harness.v1"
+
+[project]
+source_roots = ["ddi"]
+test_roots = ["tests"]
+
+[rotor]
+base_ref = "origin/main"
+risk_paths = { "ddi/schema.py" = "trust-boundary", "schemas/" = "trust-boundary", "ddi/capa.py" = "trust-boundary" }
+risk_words = ["revert", "hotfix", "schema"]
+
+[contexts.loop]
+paths = ["ddi/loop.py", "ddi/rotor.py", "ddi/eep.py", "ddi/checks.py", "ddi/events.py", "ddi/gitio.py"]
+terms = ["rotor", "slice", "rule", "check", "event", "range"]
+invariants = ["the same repository facts give the same scope and the same slice",
+              "every error event has a CAPA or conflict draft"]
+
+[contexts.evidence]
+paths = ["ddi/capa.py", "ddi/artifact.py", "ddi/schema.py", "schemas/"]
+terms = ["draft", "artifact", "claim", "schema"]
+invariants = ["a draft or artifact is never written with any trust but unverified_claim",
+              "ci_provenance is null in everything the harness writes"]
+
+[contexts.gauntlet]
+paths = ["ddi/gates/"]
+terms = ["gate", "crap", "mutant", "layer", "suite"]
+invariants = ["gates run in the order crap, mutation, pyramid, and stop at the first failure"]
+
+[solution_check]
+max_changed_lines = 400
+
+[gates.crap]
+threshold = 30.0
+
+[gates.mutation]
+min_score = 0.80
+max_mutants = 40
+timeout_s = 180
+
+[gates.pyramid]
+layers = { unit = "tests/test_units.py", integration = "tests/test_loop.py" }
+min_unit_share = 0.55
+max_e2e_share = 0.0
+require_layers = ["unit", "integration"]
+
+[artifacts]
+dir = ".ddi"

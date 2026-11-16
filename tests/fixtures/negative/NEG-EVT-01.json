@@ -1,0 +1,9 @@
+{
+  "schema": "ddi.event.v1",
+  "run_id": "abc123",
+  "kind": "ci_certified",
+  "name": "gate.mutation.blocked",
+  "t": 0.4,
+  "source": "gate.mutation",
+  "ci_signed_evidence": true
+}

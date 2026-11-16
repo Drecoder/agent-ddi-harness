@@ -1,0 +1,37 @@
+{
+  "schema": "ddi.eep_rules.v1",
+  "catalog": "capa",
+  "rules": [
+    {
+      "id": "CAPA-001",
+      "kind": "capa",
+      "phase": "capture",
+      "title": "Every block is a CAPA signal",
+      "text": "A broken premise, failed reproduction, tripped gate, conflict or recorded caveat emits or updates a local CAPA draft with its evidence. Nobody copies a log into an issue by hand.",
+      "weight": 1.0,
+      "triggers": {},
+      "check": "capa_on_block",
+      "blocking": true
+    },
+    {
+      "id": "CAPA-002",
+      "kind": "capa",
+      "phase": "capture",
+      "title": "One draft per fingerprint",
+      "text": "A repeated failure updates its existing draft (same fingerprint: rule or gate plus subject) and counts the recurrence, instead of opening a second draft.",
+      "weight": 0.9,
+      "triggers": {}
+    },
+    {
+      "id": "CAPA-003",
+      "kind": "capa",
+      "phase": "capture",
+      "title": "A draft is a claim",
+      "text": "The harness writes drafts with status 'draft' only. A finding becomes evidence when CI-signed results back it and the owner promotes it; the harness never marks its own draft verified.",
+      "weight": 1.0,
+      "triggers": {},
+      "check": "draft_is_claim",
+      "blocking": true
+    }
+  ]
+}
