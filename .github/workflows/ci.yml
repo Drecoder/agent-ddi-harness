@@ -27,7 +27,7 @@ env:
   # The playbook's reviewed Python pin; ci/Dockerfile must use the same one (ci/image.sh checks).
   BASE_IMAGE: python:3.12-slim@sha256:6b25cbe6577518889d553cdd5a5da97d259348d8f6e45b527dd731caaba27a07
   # git in that image, exact Debian version; ci/image.sh fails with the version to repin to.
-  GIT_VERSION: "unpinned"
+  GIT_VERSION: "1:2.47.3-0+deb13u1"
 
 jobs:
   tests:
