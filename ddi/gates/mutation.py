@@ -86,16 +86,53 @@ def _ignore(_dir, names):
     return [x for x in names if x in (".git", ".ddi", "__pycache__", "node_modules", ".venv")]
 
 
-def builtin(root: Path, cfg: dict, scope, r: GateResult) -> None:
-    g = cfg["gates"]["mutation"]
-    proj = cfg["project"]
-    files = [p for p in scope.source_files if p.endswith(".py") and (root / p).exists()]
+def plan_mutants(root: Path, files: list) -> list:
+    """Every mutant of the given files, in a fixed order: (rel, tree, site)."""
     plan = []
     for rel in files:
-        src = (root / rel).read_text()
-        tree = ast.parse(src, rel)
+        tree = ast.parse((root / rel).read_text(), rel)
         skip = _in_docstring_free_code(tree)
         plan += [(rel, tree, s) for s in sites(tree) if s[4] not in skip]
+    return plan
+
+
+def suite_cmd(work: Path, proj: dict, out: Path) -> list:
+    if proj.get("test_command"):
+        return shlex.split(proj["test_command"])
+    return [sys.executable, "-I", str(COVRUN), str(work), str(out),
+            "--tests", *proj["test_roots"], "--sources", *proj["source_roots"], "--no-trace"]
+
+
+def run_mutants(root: Path, proj: dict, chosen: list, timeout_s: float) -> tuple:
+    """Run the suite once per mutant in one scratch copy of root, restoring each file after.
+    Returns (killed, survived, survivors, seconds). A timeout counts as killed."""
+    killed = survived = 0
+    survivors = []
+    with tempfile.TemporaryDirectory(prefix="ddi-mut-") as tmp:
+        work = Path(tmp) / "p"
+        shutil.copytree(root, work, ignore=_ignore)
+        originals = {rel: (work / rel).read_text() for rel in {c[0] for c in chosen}}
+        cmd = suite_cmd(work, proj, Path(tmp) / "r.json")
+        t0 = time.time()
+        for rel, tree, site in chosen:
+            (work / rel).write_text(ast.unparse(mutate(tree, site)) + "\n")
+            try:
+                dead = subprocess.run(cmd, cwd=work, capture_output=True, timeout=timeout_s).returncode != 0
+            except subprocess.TimeoutExpired:
+                dead = True
+            if dead:
+                killed += 1
+            else:
+                survived += 1
+                survivors.append({"file": rel, "line": site[4], "mutation": site[3]})
+            (work / rel).write_text(originals[rel])
+    return killed, survived, survivors, round(time.time() - t0, 2)
+
+
+def builtin(root: Path, cfg: dict, scope, r: GateResult) -> None:
+    g = cfg["gates"]["mutation"]
+    files = [p for p in scope.source_files if p.endswith(".py") and (root / p).exists()]
+    plan = plan_mutants(root, files)
     chosen = sample(plan, g["max_mutants"])
     if len(chosen) < len(plan):
         r.caveats.append(f"sampled {len(chosen)} of {len(plan)} mutants (max_mutants)")
@@ -106,32 +143,9 @@ def builtin(root: Path, cfg: dict, scope, r: GateResult) -> None:
         r.caveats.append("mutation not run: the push changes no mutable Python source"
                          + (f" ({len(files)} file(s) without sites)" if files else ""))
         return
-    killed = survived = 0
-    survivors = []
-    with tempfile.TemporaryDirectory(prefix="ddi-mut-") as tmp:
-        work = Path(tmp) / "p"
-        shutil.copytree(root, work, ignore=_ignore)
-        originals = {rel: (work / rel).read_text() for rel in files}
-        t0 = time.time()
-        for rel, tree, site in chosen:
-            (work / rel).write_text(ast.unparse(mutate(tree, site)) + "\n")
-            cmd = [sys.executable, "-I", str(COVRUN), str(work), str(Path(tmp) / "r.json"),
-                   "--tests", *proj["test_roots"], "--sources", *proj["source_roots"], "--no-trace"]
-            if proj.get("test_command"):
-                cmd = shlex.split(proj["test_command"])
-            try:
-                p = subprocess.run(cmd, cwd=work, capture_output=True, timeout=g["timeout_s"])
-                dead = p.returncode != 0
-            except subprocess.TimeoutExpired:
-                dead = True
-            if dead:
-                killed += 1
-            else:
-                survived += 1
-                survivors.append({"file": rel, "line": site[4], "mutation": site[3]})
-            (work / rel).write_text(originals[rel])
-        r.commands.append({"cmd": f"{len(chosen)} mutant run(s) of the suite in a scratch copy",
-                           "exit": 0, "seconds": round(time.time() - t0, 2)})
+    killed, survived, survivors, secs = run_mutants(root, cfg["project"], chosen, g["timeout_s"])
+    r.commands.append({"cmd": f"{len(chosen)} mutant run(s) of the suite in a scratch copy",
+                       "exit": 0, "seconds": secs})
     score = killed / (killed + survived)
     r.metrics.update({"killed": killed, "survived": survived, "score": round(score, 3),
                       "survivors": survivors[:25]})

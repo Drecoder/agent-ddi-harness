@@ -102,9 +102,9 @@ Measured on a Linux container, Python 3.13 (your numbers will differ):
 |---|---|---|---|---|
 | clean | scoped, tested change → all three gates pass → artifact | push allowed | none | 0.86 s |
 | tripped | a weak test lets 9 of 9 mutants survive → push blocked, CAPA draft; a retry updates the same draft (2 occurrences) and the branch never reaches the remote | push blocked | 0.58 s | 1.57 s |
-| conflict | two branches change the refund invariant differently; the push with markers left in is blocked (`CON-002`), the finished resolution passes with a conflict draft naming both sides (`CON-003`) | blocked → allowed | 0.03 s | 1.25 s |
+| conflict | two branches change the refund invariant differently. The half-resolved push (conflict markers left in) is blocked (`CON-002`); the completed resolution is allowed, and its conflict draft identifies the paths both sides changed (`CON-003`) | blocked → allowed | 0.03 s | 1.25 s |
 
-Tests: 61 (41 unit, 20 integration), including one designed-to-fail case per enforced rule and
+Tests: 66 (45 unit, 21 integration), including one designed-to-fail case per enforced rule and
 gate, and the negative fixtures `NEG-EEP-01..02`, `NEG-CAPA-01..04` and `NEG-EVT-01`
 (`tests/fixtures/negative/`): an unknown rule kind, an unknown check, and drafts or events
 forging `status: verified`, `trust: ci_certified`, CI provenance or a `ci_signed_evidence` field.
@@ -113,10 +113,36 @@ Each is rejected for its stated reason.
 **The harness gates its own pushes** (`harness.toml` at the root). Its first run on itself
 blocked twice, both real: an undeclared bounded-context crossing in the commit, and a coverage
 bug that ran zero tests for projects whose `tests/` is not a package. It then found five CRAP
-violations and 20 surviving mutants in its own code; each was fixed with code or a test, and the
-17 still-applicable mutants were replayed and are now killed. The current run on itself:
-CRAP worst 30.0 (threshold 30), mutation 80% on a 40-of-528 sample (minimum 80%), pyramid
-41 unit / 20 integration, push allowed in 3 m 54 s.
+violations and 20 surviving mutants in its own code, each fixed with code or a test.
+
+### Three mutation results, three different populations
+
+They answer different questions and are not added together:
+
+| Result | Population | What it shows |
+|---|---|---|
+| **Targeted replay: 17 of 17 killed** | the 20 mutants that survived the first self-run; 17 still applied after the fixes and were re-applied one by one against the new suite; the other 3 were in code removed as dead or unneeded | those specific weaknesses are closed. It says nothing about any other mutant |
+| **Sampled gate run: 8 survived of 40 (80%)** | an independent, evenly spaced sample of 40 of the 528 mutants of the changed code, drawn by the pre-push gate on the published self-run (commit `67d5500`; the code had changed, so the sample differs from the first run's) | an estimate for the whole population, at exactly the 80% bar. Its 8 survivors are listed in that run's artifact |
+| **Full population: every mutant, no sampling** | all mutants of every source file, in CI's `mutation` job (four disjoint shards, merged; the merge refuses a partial count) | the complete survivor count. **Pending its first run in the pinned image**; this table is updated from that run |
+
+The published self-run at `67d5500`: CRAP worst 30.0 (threshold 30), mutation 80% on the 40-of-528
+sample (minimum 80%), pyramid 41 unit / 20 integration, push allowed in 3 m 54 s, on host
+Python 3.13.
+
+## CI: the same checks, reproducibly
+
+The pre-push hook is local and can be skipped; `.github/workflows/ci.yml` is the check that
+cannot. Every job runs in one image: `python:3.12-slim` pinned by digest, plus `git` pinned to an
+exact Debian version (`ci/Dockerfile`), as a non-root user with no network.
+
+| Job | When | What |
+|---|---|---|
+| `tests` | every push and pull request | the full suite, the three demos, and every negative fixture rejected for its stated reason |
+| `mutation` | daily, on demand, or on a pull request labelled `full-mutation` | every mutant of every source file in four shards, merged into one complete count (job summary and a `mutation-full` artifact) |
+
+`ci/image.sh` checks before every build that the git pin is still the base image's current
+Debian candidate; when a security update ships a newer git, CI fails with the version to repin
+to, rather than drifting.
 
 ## Roadmap: Levels 2 and 3
 
@@ -133,8 +159,8 @@ configures credentials: anything a future extension calls inherits the shell's.
 
 - It makes work checkable, not good: a wrong design with simple, well-tested code passes.
 - Built-in analyzers are Python-only; other stacks bring their own coverage and mutation reports.
-- Mutation testing samples (`max_mutants`); the harness's own sample left 8 survivors at 80%,
-  listed in its artifact, as the next tests to write.
+- The pre-push gate samples mutants (`max_mutants`) to stay fast; the complete count comes from
+  CI's full run. The 8 survivors of the published sample are the next tests to write.
 - It is a local hook: `git push --no-verify` skips it. CI and review remain the enforcement.
 
 See [`docs/design.md`](docs/design.md) for the design, including where the loop sits inside an

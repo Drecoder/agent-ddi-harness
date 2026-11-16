@@ -240,6 +240,22 @@ class PrePushCommand(unittest.TestCase):
         self.assertIn("PUSH BLOCKED", out)
 
 
+class FullMutationRun(unittest.TestCase):
+    def test_two_shards_of_a_real_project_merge_into_the_whole_plan(self):
+        from ddi.mutation_full import merge, plan_mutants, run, source_files
+        from ddi import config
+        with tempfile.TemporaryDirectory() as t:
+            repo = make_repo(Path(t))
+            total = len(plan_mutants(repo, source_files(repo, config.load(repo))))
+            shards = [run(repo, k, 2, 30) for k in range(2)]
+        full = merge(shards)
+        self.assertEqual(full["total"], total)
+        self.assertEqual(total, 9)                              # the ledger fixture's plan
+        self.assertEqual([s["run"] for s in shards], [5, 4])
+        self.assertEqual(full["killed"] + full["survived"], total)
+        self.assertEqual(full["trust"], "unverified_claim")
+
+
 class Demos(unittest.TestCase):
     def test_the_three_demos_behave_as_designed(self):
         import demos
