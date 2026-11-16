@@ -1,7 +1,9 @@
 """Unit tests: schemas and the trust boundary, the EEP engine, CAPA drafts, the gate maths."""
 
 import ast
+import io
 import json
+from contextlib import redirect_stderr, redirect_stdout
 import sys
 import tempfile
 import unittest
@@ -391,6 +393,146 @@ class KilledSurvivors(unittest.TestCase):
         self.assertEqual(r.metrics["counts"], {"unit": 3, "integration": 1, "e2e": 0})
         self.assertEqual(r.metrics["share"], {"unit": 0.75, "integration": 0.25, "e2e": 0.0})
         self.assertTrue(r.ok)
+
+
+class FullMutationMerge(unittest.TestCase):
+    """The full-population run: shards partition the plan, and merge refuses partial counts."""
+
+    def plan(self, n):
+        return [(f"f{k % 3}.py", None, (k, "op", None, "Add->Sub", k + 1)) for k in range(n)]
+
+    def shard(self, k, of=3, plan_id="p1", total=10, run=None, killed=0, survived=None, survivors=()):
+        run = run if run is not None else len(range(k, total, of))
+        survived = run - killed if survived is None else survived
+        return {"plan_id": plan_id, "of": of, "shard": k, "total": total, "run": run, "killed": killed,
+                "survived": survived, "survivors": list(survivors)}
+
+    def test_shards_are_disjoint_and_cover_the_plan(self):
+        from ddi.mutation_full import shard_of
+        plan = self.plan(10)
+        parts = [shard_of(plan, k, 3) for k in range(3)]
+        self.assertEqual([len(p) for p in parts], [4, 3, 3])
+        flat = [m for p in parts for m in p]
+        self.assertEqual(sorted(m[2][0] for m in flat), list(range(10)))
+        with self.assertRaises(ValueError):
+            shard_of(plan, 3, 3)
+
+    def test_plan_id_depends_on_every_mutant(self):
+        from ddi.mutation_full import plan_id
+        a, b = self.plan(5), self.plan(5)
+        self.assertEqual(plan_id(a), plan_id(b))
+        b[4] = ("f1.py", None, (4, "op", None, "Sub->Add", 5))
+        self.assertNotEqual(plan_id(a), plan_id(b))
+
+    def test_merge_counts_everything_once(self):
+        from ddi.mutation_full import merge, summary
+        surv = {"file": "f1.py", "line": 2, "mutation": "Add->Sub"}
+        full = merge([self.shard(0, killed=4), self.shard(1, killed=2, survivors=[surv]), self.shard(2, killed=3)])
+        self.assertEqual((full["total"], full["killed"], full["survived"], full["score"]), (10, 9, 1, 0.9))
+        self.assertIn("`f1.py` (1): line 2 Add->Sub", summary(full))
+
+    def test_merge_refuses_anything_but_one_complete_plan(self):
+        from ddi.mutation_full import merge
+        ok = [self.shard(k) for k in range(3)]
+        for bad, why in [(ok[:2], "exactly once"), (ok + [self.shard(2)], "exactly once"),
+                         ([ok[0], ok[1], self.shard(2, plan_id="p2")], "different plans"),
+                         ([ok[0], ok[1], self.shard(2, run=2, survived=2)], "ran 9 mutants"),
+                         ([], "no shards")]:
+            with self.subTest(why), self.assertRaisesRegex(ValueError, why):
+                merge(bad)
+
+
+class MutationGateDetails(unittest.TestCase):
+    """Survivors of the full-mutation change: the gate's arithmetic, limits and records."""
+
+    def gate_with(self, killed, survived, n_survivors=0, files=("src/a.py",)):
+        survivors = [{"file": "src/a.py", "line": i, "mutation": "Add->Sub"} for i in range(n_survivors)]
+        cfg = {"project": {"test_roots": ["tests"], "source_roots": ["src"], "test_command": ""},
+               "gates": {"mutation": {"engine": "builtin", "min_score": 0.8, "max_mutants": 100, "timeout_s": 5}}}
+        ticks = iter([10.0, 11.23456])
+        with tempfile.TemporaryDirectory() as t:
+            (Path(t) / "src").mkdir()
+            (Path(t) / "src/a.py").write_text("def f(x):\n    return x + 1\n")
+            (Path(t) / "src/rates.json").write_text("{}")
+            old_run, old_time = mutation.run_mutants, mutation.time.time
+            mutation.run_mutants = lambda *a: (killed, survived, survivors, 0.5)
+            mutation.time.time = lambda: next(ticks)
+            try:
+                return mutation.gate(Path(t), cfg, Scope(source_files=list(files)), Path(t))
+            finally:
+                mutation.run_mutants, mutation.time.time = old_run, old_time
+
+    def test_score_rounding_cap_and_record(self):
+        r = self.gate_with(2, 1, n_survivors=30)
+        self.assertEqual(r.metrics["score"], 0.667)
+        self.assertEqual(len(r.metrics["survivors"]), 25)
+        self.assertEqual(r.commands[0]["exit"], 0)
+        self.assertEqual(r.seconds, 1.23)
+        self.assertFalse(r.ok)
+        self.assertIn("30 mutant(s) survived", r.findings[0]["message"])
+
+    def test_exactly_the_minimum_passes(self):
+        r = self.gate_with(4, 1, n_survivors=1)
+        self.assertEqual(r.metrics["score"], 0.8)
+        self.assertTrue(r.ok)
+        self.assertEqual(r.findings, [])
+
+    def test_only_existing_python_files_are_mutated(self):
+        r = self.gate_with(1, 0, files=("src/a.py", "src/rates.json", "src/deleted.py"))
+        self.assertEqual(r.metrics["files"], ["src/a.py"])
+
+    def test_a_boolean_flips_and_a_number_moves(self):
+        tree = ast.parse("X = True\nY = 1\n")
+        by = {s[3]: s for s in mutation.sites(tree)}
+        self.assertEqual(ast.unparse(mutation.mutate(tree, by["True->False"])), "X = False\nY = 1")
+        self.assertEqual(ast.unparse(mutation.mutate(tree, by["1->2"])), "X = True\nY = 2")
+
+
+class FullMutationCli(unittest.TestCase):
+    def test_shard_range_error_names_the_range(self):
+        from ddi.mutation_full import shard_of
+        with self.assertRaisesRegex(ValueError, r"^shard 3 is not in 0\.\.2$"):
+            shard_of([], 3, 3)
+
+    def test_merge_refuses_shards_that_disagree_on_the_plan_size(self):
+        from ddi.mutation_full import merge
+        a = {"plan_id": "p", "of": 2, "shard": 0, "total": 4, "run": 2, "killed": 2, "survived": 0, "survivors": []}
+        with self.assertRaisesRegex(ValueError, "disagree on the plan size"):
+            merge([a, a | {"shard": 1, "total": 5}])
+
+    def test_arguments_are_required_and_defaulted(self):
+        from ddi import mutation_full
+        for argv in ([], ["merge", "x.json"], ["run"]):
+            with self.subTest(argv=argv), self.assertRaises(SystemExit):
+                with redirect_stderr(io.StringIO()):
+                    mutation_full.main(argv)
+        seen = {}
+        old = mutation_full.run
+        mutation_full.run = lambda root, shard, of, timeout: seen.update(timeout=timeout, shard=shard, of=of) or \
+            {"run": 0, "total": 0, "killed": 0, "survived": 0, "seconds": 0}
+        try:
+            with tempfile.TemporaryDirectory() as t, redirect_stdout(io.StringIO()):
+                mutation_full.main(["run", "--out", str(Path(t, "s.json"))])
+        finally:
+            mutation_full.run = old
+        self.assertEqual(seen, {"timeout": 180.0, "shard": 0, "of": 1})
+
+    def test_merge_cli_writes_json_and_summary_or_refuses(self):
+        from ddi import mutation_full
+        shard = {"plan_id": "p", "of": 1, "shard": 0, "total": 2, "run": 2, "killed": 2, "survived": 0, "survivors": []}
+        with tempfile.TemporaryDirectory() as t:
+            Path(t, "s0.json").write_text(json.dumps(shard))
+            with redirect_stdout(io.StringIO()):
+                code = mutation_full.main(["merge", str(Path(t, "s0.json")), "--out", str(Path(t, "f.json")),
+                                           "--summary", str(Path(t, "f.md"))])
+            self.assertEqual(code, 0)
+            text = Path(t, "f.json").read_text()
+            self.assertTrue(text.endswith("}\n"))
+            self.assertEqual(json.loads(text)["score"], 1.0)
+            self.assertIn("killed: **2**", Path(t, "f.md").read_text())
+            Path(t, "s0.json").write_text(json.dumps(shard | {"run": 1}))
+            with redirect_stderr(io.StringIO()):
+                self.assertEqual(mutation_full.main(["merge", str(Path(t, "s0.json")), "--out", str(Path(t, "g.json"))]), 2)
 
 
 if __name__ == "__main__":

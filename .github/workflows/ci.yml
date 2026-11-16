@@ -1,0 +1,116 @@
+# Reproducible verification for the harness itself, in an image pinned by digest.
+#
+#   tests     every push and pull request: the full suite, the demos, the negative fixtures
+#   mutation  daily, on demand, or on a pull request labelled `full-mutation`: every mutant of
+#             every source file (no sampling), in four disjoint shards, merged into one count
+#
+# The pre-push hook is local and can be skipped; this is the check that cannot.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  schedule:
+    - cron: "41 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+env:
+  # The playbook's reviewed Python pin; ci/Dockerfile must use the same one (ci/image.sh checks).
+  BASE_IMAGE: python:3.12-slim@sha256:6b25cbe6577518889d553cdd5a5da97d259348d8f6e45b527dd731caaba27a07
+  # git in that image, exact Debian version; ci/image.sh fails with the version to repin to.
+  GIT_VERSION: "unpinned"
+
+jobs:
+  tests:
+    name: Tests, demos and negative fixtures (pinned image)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the pinned image
+        run: bash ci/image.sh
+      - name: Unit and integration tests
+        run: bash ci/run.sh -- python -m unittest -v tests.test_units tests.test_loop
+      - name: Demos (real git pushes to a local bare remote)
+        run: bash ci/run.sh --out "$RUNNER_TEMP/demos" --workdir /out -- python /work/examples/demos.py
+      - name: Negative fixtures fail for their stated reason
+        run: bash ci/run.sh -- python ci/negative_fixtures.py
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Pinned image"
+            echo "\`$BASE_IMAGE\`, git \`$GIT_VERSION\`"
+            [ -f "$RUNNER_TEMP/demos/demo-results.json" ] && { echo; echo "### Demos"; echo '```json'; cat "$RUNNER_TEMP/demos/demo-results.json"; echo '```'; }
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  mutation:
+    name: Full mutation, shard ${{ matrix.shard }} of 4
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'full-mutation'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the pinned image
+        run: bash ci/image.sh
+      - name: Run this shard's mutants
+        run: >-
+          bash ci/run.sh --out "$RUNNER_TEMP/shard" --
+          python -m ddi.mutation_full run --repo /work --shard ${{ matrix.shard }} --of 4
+          --out /out/shard-${{ matrix.shard }}.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/shard/shard-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 30
+
+  mutation-summary:
+    name: Full mutation, complete count
+    needs: mutation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: mutation-shard-*
+          path: ${{ runner.temp }}/shards
+          merge-multiple: true
+      - name: Build the pinned image
+        run: bash ci/image.sh
+      - name: Merge the shards (refuses a partial count)
+        run: |
+          set -euo pipefail
+          bash ci/run.sh --in "$RUNNER_TEMP/shards" --out "$RUNNER_TEMP/result" -- \
+            sh -c 'python -m ddi.mutation_full merge /in/shard-*.json --out /out/mutation-full.json --summary /out/mutation-full.md'
+          cat "$RUNNER_TEMP/result/mutation-full.md" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-full
+          path: |
+            ${{ runner.temp }}/result/mutation-full.json
+            ${{ runner.temp }}/result/mutation-full.md
+          if-no-files-found: error
+          retention-days: 90
